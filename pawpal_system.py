@@ -3,6 +3,14 @@
 from dataclasses import dataclass, field
 from datetime import time
 
+PRIORITY_SCORES = {"low": 1, "medium": 2, "high": 3}
+TIME_OF_DAY_ORDER = {"morning": 0, None: 1, "evening": 2}  # order used when placing chosen tasks
+
+
+def add_minutes(start: time, minutes: int) -> time:
+    """Return the time `minutes` after `start` (datetime.time doesn't support + timedelta)."""
+    pass
+
 
 @dataclass
 class Pet:
@@ -22,6 +30,10 @@ class Task:
     pet: Pet
     preferred_time: str | None = None  # "morning", "evening" or None
 
+    def __post_init__(self) -> None:
+        """Raise ValueError if priority or preferred_time isn't an allowed value, or duration isn't positive."""
+        pass
+
     def priority_score(self) -> int:
         """Return the priority as a number (high = 3, medium = 2, low = 1) for sorting."""
         pass
@@ -38,15 +50,19 @@ class Owner:
     tasks: list[Task] = field(default_factory=list)
 
     def add_pet(self, pet: Pet) -> None:
-        """Add a pet to this owner."""
+        """Add a pet to this owner. Raise ValueError if a pet with that name already exists."""
         pass
 
     def add_task(self, task: Task) -> None:
-        """Add a care task to the to-do list."""
+        """Add a care task to the to-do list. Raise ValueError if task.pet isn't one of this owner's pets."""
         pass
 
-    def edit_task(self, title: str, changes: dict) -> None:
-        """Find the task with this title and update the given fields."""
+    def edit_task(self, pet_name: str, title: str, changes: dict) -> None:
+        """Replace the task matching pet_name + title with an updated copy.
+
+        Uses dataclasses.replace(), so unknown field names raise TypeError and
+        bad values get caught by Task.__post_init__.
+        """
         pass
 
 
@@ -54,6 +70,8 @@ class Owner:
 class DailyPlan:
     """The result of scheduling: what got scheduled, what got skipped, and why."""
 
+    day_start: time
+    available_minutes: int
     scheduled: list[tuple[Task, time, time, str]] = field(default_factory=list)  # (task, start, end, reason)
     skipped: list[tuple[Task, str]] = field(default_factory=list)  # (task, reason)
 
@@ -70,7 +88,7 @@ class DailyPlan:
         pass
 
     def explain(self) -> str:
-        """Return a readable explanation of why the plan looks like this."""
+        """Return a readable explanation of the plan, e.g. minutes used out of available and why tasks were skipped."""
         pass
 
     def to_table(self) -> list[dict]:
@@ -85,9 +103,16 @@ class Scheduler:
         self.owner = owner
 
     def sort_tasks(self, tasks: list[Task]) -> list[Task]:
-        """Return tasks in the order they should be scheduled (priority first, then preferred time)."""
+        """Return a new list sorted by priority, highest first (doesn't reorder owner.tasks)."""
+        pass
+
+    def order_by_preferred_time(self, tasks: list[Task]) -> list[Task]:
+        """Return a new list ordered morning -> no preference -> evening."""
         pass
 
     def build_plan(self) -> DailyPlan:
-        """Fit the owner's tasks into their available time and return the plan."""
+        """Choose tasks by priority until time runs out, order them by preferred time, then assign start times.
+
+        The time budget is capped so the plan never runs past midnight.
+        """
         pass

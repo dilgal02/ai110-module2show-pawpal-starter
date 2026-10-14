@@ -9,7 +9,7 @@ classDiagram
         +list~Task~ tasks
         +add_pet(Pet pet)
         +add_task(Task task)
-        +edit_task(str title, dict changes)
+        +edit_task(str pet_name, str title, dict changes)
     }
 
     class Pet {
@@ -29,11 +29,14 @@ classDiagram
     class Scheduler {
         +Owner owner
         +sort_tasks(list~Task~ tasks) list~Task~
+        +order_by_preferred_time(list~Task~ tasks) list~Task~
         +build_plan() DailyPlan
     }
 
     %% scheduled = (Task, start_time, end_time, reason); skipped = (Task, reason)
     class DailyPlan {
+        +time day_start
+        +int available_minutes
         +list~tuple~ scheduled
         +list~tuple~ skipped
         +add_entry(Task task, time start, str reason)
