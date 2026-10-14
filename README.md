@@ -42,16 +42,29 @@ pip install -r requirements.txt
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
 
+## 🛠️ Implementation Summary
+
+The scheduling logic lives in `pawpal_system.py` and is built from four classes:
+
+- **`Task`**: a single care activity with a description, start time (`"HH:MM"`), duration, priority (low/medium/high), frequency (once/daily/weekly) and completion status. It checks its own values when it's created, and `mark_complete()` marks it as done.
+- **`Pet`**: a pet's name and species, plus its own list of tasks. `add_task()` and `edit_task()` manage that list.
+- **`Owner`**: the owner's name, how many minutes they have available today, and their pets. `get_all_tasks()` returns every pet's tasks together in one list.
+- **`Scheduler`**: the "brain". It reads tasks only through `Owner.get_all_tasks()`, so it plans across all pets at once. `build_plan()` drops completed tasks, sorts the rest by priority (earlier time breaks ties), keeps adding tasks while they fit in the owner's available minutes, and returns the chosen tasks in time order.
+
+How they work together: an `Owner` has many `Pet`s and each `Pet` has many `Task`s. The `Scheduler` is given the `Owner`, gathers all tasks through it, and produces today's plan. `main.py` builds a small example (one owner, two pets, four tasks) and prints the schedule. `tests/test_pawpal.py` checks task completion and adding tasks to a pet.
+
 ## 🖥️ Sample Output
 
 Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+$ python main.py
+Today's Schedule
+================
+07:30 — Feeding for Luna (10 min) [priority: high]
+08:00 — Morning walk for Mochi (30 min) [priority: high]
+17:00 — Play time for Luna (15 min) [priority: low]
+18:30 — Evening walk for Mochi (30 min) [priority: medium]
 ```
 
 ## 🧪 Testing PawPal+

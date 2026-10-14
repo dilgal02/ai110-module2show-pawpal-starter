@@ -71,10 +71,24 @@ I didn't take every suggestion though. The AI also mentioned replacing the tuple
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
 - What kinds of prompts or questions were most helpful?
 
+I used Claude Code inside VS Code pretty much the whole way through, one assignment step at a time. First I had it read the scenario and pick out the three core actions. Then I had it brainstorm the classes with their attributes and methods, turn that into a Mermaid UML diagram, and generate the class skeleton with dataclasses. After that it helped me implement the logic, write `main.py` as a testing ground, write the first pytest tests, and add docstrings and the summary to the README.
+
+The most helpful prompts were the specific ones that asked it to look for problems instead of just building stuff. For example "review the diagram, make sure the relationships make sense and there's no unnecessary complexity", or giving it `pawpal_system.py` and asking if it noticed any missing relationships or logic bottlenecks. Those gave me concrete issues with actual examples. One was that two pets could both have a "Feeding" task, so editing by title would change the wrong one. The least helpful prompts were the open ones like "flesh out the implementation", because the AI took that as permission to do way more than I asked (more on that below). What worked better was pasting the exact requirements from the assignment so it had something specific to stick to.
+
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
 - How did you evaluate or verify what the AI suggested?
+
+The biggest one was when I asked it to implement the four classes. It did that, but it also added a lot I never asked for. It kept a fifth `DailyPlan` class with explanations for every task, added overlap checking between tasks, made recurring tasks automatically create their next copy when completed, and added due dates. It also rewrote my UML and added a paragraph to this reflection on its own. Some of it was actually kind of smart, but this is a graded assignment, and I need code that matches the requirements and that I can explain myself. So I told it to keep only what the assignment asks for. It removed the extra class and features and reverted the UML and reflection changes. That left the four required classes, with the `Scheduler` reading tasks through `Owner.get_all_tasks()` like the assignment says.
+
+Another thing I noticed is that the AI changed its mind about the design. At first it put the tasks on `Pet`, then during the UML review it moved them to `Owner`, and then the assignment said they should be on `Pet` after all. So its suggestions can sound reasonable and still not be what the assignment needs, and I had to check them against the actual instructions every time. In the skeleton review I also skipped two of its suggestions (a separate `PlanEntry` class and an Enum for priority) because they added more code than they were worth.
+
+To verify things, I didn't just trust that the code was right:
+- I ran `main.py` and checked the schedule by hand. The tasks came out in time order (07:30, 08:00, 17:00, 18:30), and 85 minutes in total fit in the 120 available, so nothing should have been dropped.
+- I also had it run a quick check with only 60 minutes available. The 40-minute low-priority brushing got left out like it should, and a task disappeared from the plan after I marked it complete.
+- For the AI's claims during the skeleton review, I made it actually test them instead of just believing it. For example, `time + timedelta` really does throw a `TypeError` in Python, and `dataclasses.replace()` really does catch a typo like `"priorty"`.
+- The two pytest tests pass (`mark_complete()` changes the status, and `add_task()` increases the pet's task count). That's also how I found out pytest only works from the `.venv` with `python -m pytest`, because plain `pytest` couldn't find `pawpal_system`.
 
 ---
 
