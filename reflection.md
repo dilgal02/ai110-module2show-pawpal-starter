@@ -7,6 +7,16 @@
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
 
+Before drawing any UML I reread the scenario in the README and tried to figure out what a user actually needs to *do* in the app. Basically it's a busy pet owner who keeps forgetting stuff, so the app should help them stay on track. I ended up with three core actions:
+
+1. **Add an owner and their pet.** The user puts in some basic info about themselves (name, how much free time they have today, maybe some preferences like "I prefer walks in the morning") and about their pet (name, species/breed). This has to come first, because the scheduler can't plan anything if it doesn't know how much time the owner has or who the tasks are even for.
+
+2. **Add or edit a care task.** The user can create tasks like "morning walk", "feeding", "give meds" or "brushing". Each task needs at least a duration in minutes and a priority (low / medium / high). They should also be able to edit a task later, for example if the walk takes longer than they thought or the meds become more important. These tasks are basically the input for the whole scheduling part.
+
+3. **Generate and view today's plan.** The user clicks a button and gets a daily schedule. The app tries to fit the tasks into the time the owner has, high priority stuff goes first, and if something doesn't fit it gets skipped. The plan should also explain *why* it looks like that (e.g. "meds were scheduled first because they're high priority, grooming was skipped because there was no time left"), because the README says the app should explain its reasoning and not just spit out a list.
+
+Based on these actions I figured my first classes would roughly be `Owner`, `Pet`, `Task` and `Scheduler` (which builds some kind of daily plan). `Owner` and `Pet` store the profile info, `Task` holds the info about each care task, and `Scheduler` does the actual sorting/filtering and keeps track of the reasoning. I'll probably change some of this once I start coding, but this is my starting point.
+
 **b. Design changes**
 
 - Did your design change during implementation?

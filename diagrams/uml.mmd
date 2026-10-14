@@ -1,15 +1,51 @@
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
-    %% Keep this file updated so it matches your final implementation.
+    %% PawPal+ initial design (draft). Keep this file updated so it matches the final implementation.
 
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Owner {
+        +str name
+        +int available_minutes
+        +time day_start
+        +list~Pet~ pets
+        +list~Task~ tasks
+        +add_pet(Pet pet)
+        +add_task(Task task)
+        +edit_task(str title, dict changes)
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class Pet {
+        +str name
+        +str species
     }
 
-    ClassName --> AnotherClass : relationship
+    class Task {
+        +str title
+        +int duration_minutes
+        +str priority
+        +Optional~str~ preferred_time
+        +Pet pet
+        +priority_score() int
+    }
+
+    class Scheduler {
+        +Owner owner
+        +sort_tasks(list~Task~ tasks) list~Task~
+        +build_plan() DailyPlan
+    }
+
+    %% scheduled = (Task, start_time, end_time, reason); skipped = (Task, reason)
+    class DailyPlan {
+        +list~tuple~ scheduled
+        +list~tuple~ skipped
+        +add_entry(Task task, time start, str reason)
+        +skip(Task task, str reason)
+        +total_minutes() int
+        +explain() str
+        +to_table() list~dict~
+    }
+
+    Owner "1" o-- "0..*" Pet : owns
+    Owner "1" *-- "0..*" Task : tracks
+    Task "0..*" --> "1" Pet : for
+    Scheduler --> "1" Owner : plans for
+    Scheduler ..> DailyPlan : creates
+    DailyPlan --> "0..*" Task : lists
