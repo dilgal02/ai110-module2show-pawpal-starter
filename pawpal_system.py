@@ -1,10 +1,12 @@
 """PawPal+ core classes: Task, Pet, Owner and Scheduler."""
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import date, datetime, timedelta
+from itertools import combinations
 
 PRIORITY_SCORES = {"low": 1, "medium": 2, "high": 3}
 FREQUENCIES = ("once", "daily", "weekly")
+RECURRENCE_INTERVALS = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1)}
 
 
 @dataclass
@@ -17,6 +19,7 @@ class Task:
     priority: str = "medium"  # "low", "medium" or "high"
     frequency: str = "daily"  # "once", "daily" or "weekly"
     completed: bool = False
+    due_date: date = field(default_factory=date.today)
 
     def __post_init__(self) -> None:
         """Validate the fields and normalize time to zero-padded "HH:MM" so times sort correctly."""
@@ -32,9 +35,29 @@ class Task:
         """Return the priority as a number (high = 3, medium = 2, low = 1) for sorting."""
         return PRIORITY_SCORES[self.priority]
 
-    def mark_complete(self) -> None:
-        """Mark the task as done."""
+    def time_window(self) -> tuple[int, int]:
+        """Return when the task starts and ends as minutes after midnight, e.g. 08:00 for 30 min -> (480, 510)."""
+        hours, minutes = map(int, self.time.split(":"))
+        start = hours * 60 + minutes
+        return start, start + self.duration_minutes
+
+    def overlaps(self, other: "Task") -> bool:
+        """Return True if both tasks are on the same day and their times overlap (back-to-back doesn't count)."""
+        start, end = self.time_window()
+        other_start, other_end = other.time_window()
+        return self.due_date == other.due_date and start < other_end and other_start < end
+
+    def mark_complete(self) -> "Task | None":
+        """Mark the task as done and return a copy for its next due date, or None if it doesn't repeat.
+
+        Completing a task that's already done returns None, so it can't create the next occurrence twice.
+        """
+        if self.completed:
+            return None
         self.completed = True
+        if self.frequency == "once":
+            return None
+        return replace(self, completed=False, due_date=self.due_date + RECURRENCE_INTERVALS[self.frequency])
 
 
 @dataclass
@@ -82,12 +105,43 @@ class Scheduler:
         self.owner = owner
 
     def get_pending_tasks(self) -> list[Task]:
-        """Return the tasks across all of the owner's pets that aren't completed yet."""
-        return [task for task in self.owner.get_all_tasks() if not task.completed]
+        """Return the tasks across all of the owner's pets that aren't completed and are due today or earlier."""
+        today = date.today()
+        return [task for task in self.owner.get_all_tasks() if not task.completed and task.due_date <= today]
+
+    def complete_task(self, task: Task) -> Task | None:
+        """Mark a task done; for a daily or weekly task, add its next occurrence to the same pet and return it."""
+        for pet in self.owner.pets:
+            if any(pet_task is task for pet_task in pet.tasks):
+                next_task = task.mark_complete()
+                if next_task is not None:
+                    pet.add_task(next_task)
+                return next_task
+        raise ValueError(f"{task.description!r} doesn't belong to any of {self.owner.name}'s pets")
+
+    def filter_tasks(self, completed: bool | None = None, pet_name: str | None = None) -> list[Task]:
+        """Return the tasks that match every filter given; a filter left as None matches everything.
+
+        Pet names are compared ignoring case, so "luna" finds Luna's tasks.
+        """
+        return [
+            task
+            for pet in self.owner.pets
+            if pet_name is None or pet.name.lower() == pet_name.lower()
+            for task in pet.tasks
+            if completed is None or task.completed == completed
+        ]
 
     def sort_tasks(self, tasks: list[Task]) -> list[Task]:
         """Return a new list with the highest priority first, ties broken by earlier time."""
         return sorted(tasks, key=lambda task: (-task.priority_score(), task.time))
+
+    def sort_by_time(self, tasks: list[Task]) -> list[Task]:
+        """Return a new list with the earliest start time first.
+
+        Comparing the "HH:MM" strings works because Task zero-pads them, so text order matches clock order.
+        """
+        return sorted(tasks, key=lambda task: task.time)
 
     def build_plan(self) -> list[Task]:
         """Pick pending tasks by priority until the owner's time runs out, and return them in time order."""
@@ -97,4 +151,21 @@ class Scheduler:
             if task.duration_minutes <= minutes_left:
                 plan.append(task)
                 minutes_left -= task.duration_minutes
-        return sorted(plan, key=lambda task: task.time)
+        return self.sort_by_time(plan)
+
+    def detect_conflicts(self) -> list[str]:
+        """Return a warning for each pair of pending tasks that overlap; empty if none do.
+
+        Only warns, never raises, since the owner may be fine with two quick tasks overlapping.
+        Checks every pair, which is plenty fast for the handful of tasks one owner has in a day.
+        """
+        pending = [(pet, task) for pet in self.owner.pets for task in pet.tasks if not task.completed]
+        pending.sort(key=lambda pair: (pair[1].due_date, pair[1].time))  # only so each warning names the earlier task first
+        warnings = []
+        for (pet, task), (other_pet, other) in combinations(pending, 2):
+            if task.overlaps(other):
+                warnings.append(
+                    f"Conflict on {task.due_date}: {pet.name}'s {task.description} at {task.time} "
+                    f"({task.duration_minutes} min) overlaps {other_pet.name}'s {other.description} at {other.time}"
+                )
+        return warnings

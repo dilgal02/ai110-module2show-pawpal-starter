@@ -62,6 +62,10 @@ I didn't take every suggestion though. The AI also mentioned replacing the tuple
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
 
+My conflict check (`detect_conflicts()`) compares every pair of pending tasks to see if their times overlap, which isn't the fastest way to do it. The first version sorted the tasks by start time and stopped checking as soon as the next task started after the current one ended, so it skipped most of the pairs. When I asked the AI how to simplify it, it suggested just checking every pair with `itertools.combinations` and moving the overlap rule into its own `Task.overlaps()` method. So the tradeoff is readability over speed: the number of comparisons grows with the square of the number of tasks.
+
+I think that's reasonable here because one owner just doesn't have that many tasks in a day. Even a really busy day with 20 tasks is only 190 pairs, which is instant. The old version also only worked because the list was sorted first, so if you didn't know that, the early `break` looked like a bug. And it copied the rest of the list on every loop anyway, so it wasn't even as fast as it looked. The new version is easier to read, and the "do these two tasks overlap?" rule is now in one place where I can test it. The AI wrote the whole loop as one list comprehension, which was more "Pythonic" but honestly harder to read, so I kept the idea but wrote it as a normal `for` loop. If the app ever had to handle thousands of tasks, I'd go back to the sorted version.
+
 ---
 
 ## 3. AI Collaboration

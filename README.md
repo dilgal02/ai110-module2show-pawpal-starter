@@ -85,14 +85,42 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+On top of the basic plan, the `Scheduler` can sort tasks by time, filter them, warn about overlapping tasks and repeat daily/weekly tasks. Run `python main.py` to see all four in the terminal.
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_by_time()`, `Scheduler.sort_tasks()` | By start time, or by priority with earlier time breaking ties |
+| Filtering | `Scheduler.filter_tasks()`, `Scheduler.get_pending_tasks()` | By pet name and/or completion status; the plan only uses tasks due today |
+| Conflict handling | `Scheduler.detect_conflicts()`, `Task.overlaps()`, `Task.time_window()` | Warns about overlapping time slots, for the same pet or different pets |
+| Recurring tasks | `Scheduler.complete_task()`, `Task.mark_complete()` | Completing a daily/weekly task adds its next occurrence |
+
+### Sorting by time: `Scheduler.sort_by_time()`
+
+- Returns a new list with the earliest task first, using `sorted(tasks, key=lambda task: task.time)`.
+- Comparing the `"HH:MM"` strings directly works because `Task` zero-pads every time when it's created (`"8:00"` becomes `"08:00"`), so text order matches clock order.
+- `build_plan()` uses `sort_tasks()` (highest priority first, ties broken by earlier time) to decide which tasks fit in the owner's time, then `sort_by_time()` to return them in the order they happen.
+
+### Filtering: `Scheduler.filter_tasks(completed=None, pet_name=None)`
+
+- `completed=True` / `False` keeps only finished or unfinished tasks; `pet_name="Luna"` keeps only that pet's tasks. Pass both to combine them, or neither to get every task.
+- Pet names are matched ignoring case, and an unknown pet name returns an empty list instead of an error.
+- Separately, `get_pending_tasks()` gives `build_plan()` only the tasks that aren't completed and are due today or earlier, and `build_plan()` skips any task that doesn't fit in the time left.
+
+### Conflict detection: `Scheduler.detect_conflicts()`
+
+- Returns one warning string per pair of pending tasks whose times overlap, for example:
+  `Conflict on 2026-10-14: Mochi's Morning walk at 08:00 (30 min) overlaps Luna's Medication at 08:00`
+- It checks overlapping durations, not just identical start times: a 30-minute walk at 08:00 also conflicts with brushing at 08:20. Back-to-back tasks (one ends at 08:30, the next starts at 08:30), tasks on different days and completed tasks don't count.
+- It only warns and never raises, so the program keeps running and the owner decides what to move. It doesn't change the plan.
+- `Task.time_window()` turns a task into start/end minutes after midnight, `Task.overlaps()` holds the overlap rule, and `detect_conflicts()` checks every pair with `itertools.combinations`. Checking every pair was picked over a faster but harder to read approach; see section 2b of `reflection.md`.
+
+### Recurring tasks: `Scheduler.complete_task()`
+
+- Each `Task` has a `due_date` (today by default) and a `frequency` of `"once"`, `"daily"` or `"weekly"`.
+- `Scheduler.complete_task(task)` marks the task done and, for a daily or weekly task, adds a new copy to the same pet with the due date moved forward 1 or 7 days (`timedelta`). A one-time task gets no copy.
+- The copy is built by `Task.mark_complete()`, which also returns nothing if the task was already completed, so completing a task twice doesn't create two copies.
+- Tomorrow's copy isn't part of today's plan, because `get_pending_tasks()` only includes tasks due today or earlier.
+- Call `scheduler.complete_task(task)` rather than `task.mark_complete()` on its own: a `Task` doesn't know which pet it belongs to, so only the scheduler can add the next occurrence to the right pet.
 
 ## 📸 Demo Walkthrough
 
