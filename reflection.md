@@ -57,6 +57,15 @@ I didn't take every suggestion though. The AI also mentioned replacing the tuple
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
 - How did you decide which constraints mattered most?
 
+My scheduler looks at four things:
+
+- **Available time.** This is the hard limit. `build_plan()` never schedules more minutes than the owner has (120 in the app).
+- **Priority.** High tasks get picked first, then medium, then low. If two tasks have the same priority, the earlier one goes first.
+- **Start time and duration.** Every task has a real start time, so the plan is shown in time order and the conflict check can tell when two tasks overlap.
+- **Due date and status.** Only tasks that aren't done and are due today or earlier go into today's plan, so tomorrow's copy of a daily walk doesn't show up today.
+
+Time had to be the hard limit, because you can't make more minutes in a day. After that, priority decides what gets dropped, because missing meds or feeding is way worse than missing play time. The morning/evening preferences from my first design didn't make it into the final version, since every task now has an actual start time instead. Conflicts are the one thing I didn't make a hard rule. I specifically asked for a "lightweight" check that only warns instead of blocking or crashing, because sometimes an owner can do two quick things at once, and they know their day better than the app does.
+
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
@@ -75,7 +84,7 @@ I think that's reasonable here because one owner just doesn't have that many tas
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
 - What kinds of prompts or questions were most helpful?
 
-I used Claude Code inside VS Code pretty much the whole way through, one assignment step at a time. First I had it read the scenario and pick out the three core actions. Then I had it brainstorm the classes with their attributes and methods, turn that into a Mermaid UML diagram, and generate the class skeleton with dataclasses. After that it helped me implement the logic, write `main.py` as a testing ground, write the first pytest tests, and add docstrings and the summary to the README.
+I used Claude Code in VS Code as a tool that I directed one assignment step at a time, not as something that builds the whole app for me. Every step followed the same routine: I pasted the exact step from the assignment, it made that one change, and the result had to pass `main.py` and the tests before I committed it. I used it in a few different roles. At the start it was a brainstorming partner for the three core actions, the classes and the first UML. Then it was a reviewer: I gave it my skeleton and my diagram and asked it to find problems. After that it drafted the code and tests one feature at a time, and near the end I used it as a checker for edge cases and for whether the UML still matched the code. The big decisions stayed with me: what's in scope, how the design looks, and what to keep or throw out.
 
 The most helpful prompts were the specific ones that asked it to look for problems instead of just building stuff. For example "review the diagram, make sure the relationships make sense and there's no unnecessary complexity", or giving it `pawpal_system.py` and asking if it noticed any missing relationships or logic bottlenecks. Those gave me concrete issues with actual examples. One was that two pets could both have a "Feeding" task, so editing by title would change the wrong one. The least helpful prompts were the open ones like "flesh out the implementation", because the AI took that as permission to do way more than I asked (more on that below). What worked better was pasting the exact requirements from the assignment so it had something specific to stick to.
 
@@ -90,9 +99,24 @@ Another thing I noticed is that the AI changed its mind about the design. At fir
 
 To verify things, I didn't just trust that the code was right:
 - I ran `main.py` and checked the schedule by hand. The tasks came out in time order (07:30, 08:00, 17:00, 18:30), and 85 minutes in total fit in the 120 available, so nothing should have been dropped.
-- I also had it run a quick check with only 60 minutes available. The 40-minute low-priority brushing got left out like it should, and a task disappeared from the plan after I marked it complete.
+- I also asked for a second check with only 60 minutes available, to see what happens when time runs out. The 40-minute low-priority brushing got left out like it should, and a task disappeared from the plan after I marked it complete.
 - For the AI's claims during the skeleton review, I made it actually test them instead of just believing it. For example, `time + timedelta` really does throw a `TypeError` in Python, and `dataclasses.replace()` really does catch a typo like `"priorty"`.
 - The two pytest tests pass (`mark_complete()` changes the status, and `add_task()` increases the pet's task count). That's also how I found out pytest only works from the `.venv` with `python -m pytest`, because plain `pytest` couldn't find `pawpal_system`.
+
+**c. AI strategy**
+
+- Which AI coding assistant features were most effective for building your scheduler?
+- Give one example of an AI suggestion you rejected or modified to keep your system design clean.
+- How did using separate chat sessions for different phases help you stay organized?
+- Summarize what you learned about being the "lead architect" when collaborating with powerful AI tools.
+
+**Most effective features.** The most useful thing was that Claude Code can actually run code, not just write it. After every change it ran `python -m pytest` and `main.py`, and when I asked about edge cases it wrote small throwaway scripts to try them, so I got real output instead of "this should work". It even checked the Streamlit app without a browser (with Streamlit's `AppTest`) and rendered my Mermaid diagram to make sure the syntax was valid. Second was being able to send a message while it was still working. In the middle of the conflict detection I added "do a lightweight strategy that returns a warning instead of crashing", and in the middle of the app changes I asked for `st.success` / `st.warning` / `st.table`, and it adjusted right away instead of me having to redo things afterwards. Third was memory. After the first session, where it did way more than I asked, a "do only what's asked, offer extras in one line" rule got saved, and in the later session it stuck to it. It would say something like "I can also update the README if you want", and I decided when.
+
+**A suggestion I rejected.** When I asked for ideas to improve the scheduler, one of the AI's suggestions was to find the next free time slot and offer to move a task when two tasks clash. Later it also offered to make the schedule skip or move clashing tasks automatically. I didn't take either. I asked for a check that only warns, because moving tasks around on its own would mean the scheduler makes decisions the owner should make, and it would add a lot of logic that's hard to test. Same idea with the conflict code itself: the AI's simplified version was one big list comprehension, and I asked it to judge that on readability and not just on how "Pythonic" it is, so it ended up as a normal `for` loop (more on that in 2b).
+
+**Separate chat sessions.** I did the design, UML, skeleton and core classes in earlier sessions and then started a new one for the "smarter scheduling" part. Each phase ended with a commit, so the new session started from clean, working code, and the AI worked from what was actually in the files instead of from old chat history. That helped, because in the first session it had changed its mind about the design a few times (tasks on `Pet`, then on `Owner`, then back on `Pet`), and none of that back-and-forth followed me into the new session. The one thing I did want to carry over, the "don't do more than I ask" rule, was saved in its memory, so I didn't have to repeat it. I didn't split everything perfectly though: the algorithms, tests, UI and docs all ended up in one long session, and next time I'd start a fresh one for the docs part too.
+
+**Being the "lead architect".** The AI is fast and sounds just as confident when it's wrong as when it's right, so my job was making the decisions and checking the results, not typing the code. I set the scope (the strict-scope rule, and pasting the exact assignment step), I made the design calls (warnings instead of moving tasks, a readable loop over a clever one-liner), and I didn't accept "it works" without seeing tests or output. The prompts that helped most were questions, not orders: "list 3–5 core behaviors to verify", "what are the most important edge cases", "does the UML still match my code", "how could this be simplified". Those questions found three real bugs and an outdated diagram, which a plain "write the tests" wouldn't have. The AI even caught one of its own mistakes: it had written in the README that recurrence is shown in `main.py`, which wasn't true, and it fixed that while writing the demo section. That's exactly why I don't treat anything it writes as final until it's checked.
 
 ---
 
@@ -103,10 +127,22 @@ To verify things, I didn't just trust that the code was right:
 - What behaviors did you test?
 - Why were these tests important?
 
+There are 9 tests in `tests/test_pawpal.py`. They cover marking a task complete and adding tasks to a pet, sorting by time (including times typed without a leading zero), filtering by pet and status, recurring tasks (daily, weekly, one-time, and completing the same task twice), and conflict detection (same time, partial overlap, and the cases that shouldn't count: back-to-back tasks, other days and completed tasks).
+
+Before adding more tests I asked the AI to list the core behaviors worth verifying, and later what the most important edge cases are, instead of just saying "write tests". That gave me a list I could check against the code first. These behaviors matter because the whole plan depends on them. If sorting is off, the schedule reads wrong. If recurrence breaks, a daily feeding either disappears or shows up twice. And the conflict check has easy off-by-one mistakes: a walk that ends at 08:30 and a feeding that starts at 08:30 shouldn't be a conflict.
+
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
+
+About 3 out of 5, the same as in the README. All 9 tests pass and every feature has tests, but when I asked which behaviors and edge cases still needed checking, three things turned up that really don't work right. I didn't take that on faith either. Each one was shown with real output from a small script:
+
+- `sort_by_time()` ignores the date, so tomorrow's 07:00 breakfast sorted ahead of today's 08:00 walk.
+- Completing an overdue daily task creates a copy that's still overdue, so the task shows up in today's plan again.
+- `edit_task()` changes the wrong task when a pet has two identical tasks (the durations came out `[20, 10]` instead of `[10, 20]`).
+
+Next I'd write tests for those three, plus direct tests for `build_plan()` (priority order, a task that exactly fills the minutes left, 0 available minutes) and for two tasks at the same time always keeping the same order. I kept the 3/5 in the README with the bugs listed, because that's more honest than 5 stars.
 
 ---
 
@@ -116,10 +152,16 @@ To verify things, I didn't just trust that the code was right:
 
 - What part of this project are you most satisfied with?
 
+I'm most satisfied with the conflict detection. It catches overlapping tasks across different pets, not only identical start times, it ignores back-to-back tasks and other days, and in the app it shows up as a clear yellow warning instead of crashing anything. I also like that the `Scheduler` stayed the one "brain": `main.py` and the Streamlit app both just call its methods (sort, filter, conflicts, plan) and display the results, so the CLI demo and the app always agree.
+
 **b. What you would improve**
 
 - If you had another iteration, what would you improve or redesign?
 
+First I'd fix the three bugs from 4b. Then I'd let a `Task` know which pet it belongs to, or at least give it an id. Right now it doesn't, and that caused workarounds all over the place: `complete_task()` has to search every pet to find where to add the next copy, and both `main.py` and `app.py` build a little `id(task) -> pet name` dictionary just to print the pet's name. The `edit_task()` bug comes from the same problem. In the app I'd add a field for the available minutes (it's stuck at 120), buttons to complete, edit and delete tasks so recurrence can actually be used there, and a short "why" for each scheduled task, which was in my first design but got lost along the way.
+
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+Small decisions in the data model spread everywhere. Putting tasks on `Pet` without a link back to the pet looked harmless in the UML, but it ended up shaping `complete_task()`, the display code in two files, and one of the bugs. Next time I'd think harder about "who needs to know what" before writing the skeleton, because changing a diagram is a lot cheaper than changing code that already has tests and a UI built on top of it.
