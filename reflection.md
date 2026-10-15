@@ -127,7 +127,7 @@ To verify things, I didn't just trust that the code was right:
 - What behaviors did you test?
 - Why were these tests important?
 
-There are 9 tests in `tests/test_pawpal.py`. They cover marking a task complete and adding tasks to a pet, sorting by time (including times typed without a leading zero), filtering by pet and status, recurring tasks (daily, weekly, one-time, and completing the same task twice), and conflict detection (same time, partial overlap, and the cases that shouldn't count: back-to-back tasks, other days and completed tasks).
+There are 16 tests in `tests/test_pawpal.py`. They cover marking a task complete and adding tasks to a pet, sorting by time (including times typed without a leading zero), filtering by pet and status, recurring tasks (daily, weekly, one-time, and completing the same task twice), and conflict detection (same time, partial overlap, and the cases that shouldn't count: back-to-back tasks, other days and completed tasks). They also cover priority planning (higher priority first, and keeping the important tasks when time is short), the next available slot, saving and loading the JSON file, and the task emojis.
 
 Before adding more tests I asked the AI to list the core behaviors worth verifying, and later what the most important edge cases are, instead of just saying "write tests". That gave me a list I could check against the code first. These behaviors matter because the whole plan depends on them. If sorting is off, the schedule reads wrong. If recurrence breaks, a daily feeding either disappears or shows up twice. And the conflict check has easy off-by-one mistakes: a walk that ends at 08:30 and a feeding that starts at 08:30 shouldn't be a conflict.
 
@@ -136,13 +136,13 @@ Before adding more tests I asked the AI to list the core behaviors worth verifyi
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
 
-About 3 out of 5, the same as in the README. All 9 tests pass and every feature has tests, but when I asked which behaviors and edge cases still needed checking, three things turned up that really don't work right. I didn't take that on faith either. Each one was shown with real output from a small script:
+About 3 out of 5, the same as in the README. All 16 tests pass and every feature has tests, but when I asked which behaviors and edge cases still needed checking, three things turned up that really don't work right. I didn't take that on faith either. Each one was shown with real output from a small script:
 
 - `sort_by_time()` ignores the date, so tomorrow's 07:00 breakfast sorted ahead of today's 08:00 walk.
 - Completing an overdue daily task creates a copy that's still overdue, so the task shows up in today's plan again.
 - `edit_task()` changes the wrong task when a pet has two identical tasks (the durations came out `[20, 10]` instead of `[10, 20]`).
 
-Next I'd write tests for those three, plus direct tests for `build_plan()` (priority order, a task that exactly fills the minutes left, 0 available minutes) and for two tasks at the same time always keeping the same order. I kept the 3/5 in the README with the bugs listed, because that's more honest than 5 stars.
+Next I'd write tests for those three, plus a couple of smaller cases: an owner with 0 available minutes, and two tasks at the same time always keeping the same order. I kept the 3/5 in the README with the bugs listed, because that's more honest than 5 stars.
 
 ---
 
