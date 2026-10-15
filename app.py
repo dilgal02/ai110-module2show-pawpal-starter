@@ -2,7 +2,7 @@ from datetime import time
 
 import streamlit as st
 
-from pawpal_system import Owner, Pet, Task
+from pawpal_system import Owner, Pet, Scheduler, Task
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -85,39 +85,69 @@ if owner.pets:
     if st.button("Add task"):
         selected_pet.add_task(Task(task_title, task_time.strftime("%H:%M"), int(duration), priority))
 
-if owner.get_all_tasks():
-    st.write("Current tasks:")
+scheduler = Scheduler(owner)
+pet_names = {id(task): pet.name for pet in owner.pets for task in pet.tasks}
+PRIORITY_LABELS = {"high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}
+
+
+def show_task_table(tasks: list[Task]) -> None:
+    """Show tasks as a table, keeping the order they're given in."""
     st.table(
         [
             {
-                "pet": pet.name,
-                "time": task.time,
-                "task": task.description,
-                "duration_minutes": task.duration_minutes,
-                "priority": task.priority,
+                "Time": task.time,
+                "Task": task.description,
+                "Pet": pet_names[id(task)],
+                "Duration": f"{task.duration_minutes} min",
+                "Priority": PRIORITY_LABELS[task.priority],
             }
-            for pet in owner.pets
-            for task in pet.tasks
-        ]
+            for task in tasks
+        ],
+        hide_index=True,
+        border="horizontal",
     )
+
+
+if owner.get_all_tasks():
+    show_pet = st.selectbox("Show tasks for", ["All pets"] + [pet.name for pet in owner.pets])
+    shown = scheduler.filter_tasks(pet_name=None if show_pet == "All pets" else show_pet)
+    st.caption(f"{len(shown)} task(s), sorted by time")
+    show_task_table(scheduler.sort_by_time(shown))
+
+    conflicts = scheduler.detect_conflicts()
+    for warning in conflicts:
+        st.warning(warning, icon="⚠️")
+    if not conflicts:
+        st.success("No overlapping tasks.", icon="✅")
 else:
     st.info("No tasks yet. Add one above.")
 
 st.divider()
 
 st.subheader("Build Schedule")
-st.caption("This button should call your scheduling logic once you implement it.")
+st.caption(
+    f"Picks today's pending tasks by priority until your {owner.available_minutes} minutes run out, "
+    "then lists them in time order."
+)
 
 if st.button("Generate schedule"):
-    st.warning(
-        "Not implemented yet. Next step: create your scheduling logic (classes/functions) and call it here."
-    )
-    st.markdown(
-        """
-Suggested approach:
-1. Design your UML (draft).
-2. Create class stubs (no logic).
-3. Implement scheduling behavior.
-4. Connect your scheduler here and display results.
-"""
-    )
+    plan = scheduler.build_plan()
+    pending = scheduler.get_pending_tasks()
+    if not pending:
+        st.info("No pending tasks for today. Add one above.")
+    else:
+        if plan:
+            used = sum(task.duration_minutes for task in plan)
+            st.success(
+                f"Scheduled {len(plan)} of {len(pending)} tasks, using {used} of {owner.available_minutes} minutes.",
+                icon="✅",
+            )
+            show_task_table(plan)
+        planned = {id(task) for task in plan}
+        skipped = [task for task in pending if id(task) not in planned]
+        if skipped:
+            st.warning(
+                ", ".join(f"{task.description} for {pet_names[id(task)]} ({task.duration_minutes} min)" for task in skipped),
+                title="Didn't fit in the time left",
+                icon="⏳",
+            )
