@@ -163,6 +163,61 @@ On top of the basic plan, the `Scheduler` can sort tasks by time, filter them, w
 - Tomorrow's copy isn't part of today's plan, because `get_pending_tasks()` only includes tasks due today or earlier.
 - Call `scheduler.complete_task(task)` rather than `task.mark_complete()` on its own: a `Task` doesn't know which pet it belongs to, so only the scheduler can add the next occurrence to the right pet.
 
+## 🏆 Priority-Based Scheduling
+
+The daily plan isn't just sorted by time: it decides *what* to do by priority first, and only then puts the chosen tasks in time order.
+
+### How it works
+
+1. **Priority levels.** Every `Task` has a `priority` of `"low"`, `"medium"` or `"high"` (default `"medium"`). Any other value raises a `ValueError` when the task is created. `Task.priority_score()` turns it into a number: low = 1, medium = 2, high = 3.
+2. **Priority first, then time.** `Scheduler.sort_tasks()` sorts with the key `(-task.priority_score(), task.time)`: highest priority first, and within the same priority the earlier task first. Tasks with the same priority and time keep the order they were added.
+3. **Fitting the time budget.** `Scheduler.build_plan()` goes through today's pending tasks in that order and adds each one that still fits in the owner's remaining minutes. A task that doesn't fit is skipped, but the loop keeps going, so a shorter, lower-priority task can still use the minutes that are left.
+4. **Showing the plan.** The chosen tasks are returned in time order with `sort_by_time()`, because that's how the owner will actually do them.
+
+### CLI output examples
+
+From `python main.py` (the owner has 6 pending tasks for two pets, 100 minutes in total).
+
+The order `build_plan()` considers tasks in. All high-priority tasks come first, even the 08:00 ones, and the medium-priority 18:30 walk comes before the low-priority 12:15 brushing:
+
+```
+Pending tasks by priority, then time
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
+```
+
+The same tasks with only 60 minutes available. The three high-priority tasks take 45 minutes. The 30-minute medium-priority evening walk doesn't fit in the 15 minutes left, so it's skipped, but the 10-minute low-priority brushing still fits. The 15-minute play time no longer does (only 5 minutes are left):
+
+```
+Today's Schedule with only 60 minutes
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
+
+Didn't fit in 60 minutes
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
+```
+
+With the full 120 minutes, everything fits (see the CLI demo in the [Demo Walkthrough](#-demo-walkthrough)).
+
 ## 💾 Saving Data (Persistence)
 
 PawPal+ remembers the owner, pets and tasks between runs by saving them to `data.json` in the project folder.
@@ -224,6 +279,52 @@ owner = Owner.load_from_json("data.json")  # read them back
 | `tests/test_pawpal.py` | 2 tests: saving and loading gives back the same owner, pets and tasks, and a file with an invalid priority raises `ValueError` |
 | `README.md` | This section, and the "Current limits" line in the Demo Walkthrough |
 
+## 🎨 Output Formatting
+
+Both the CLI demo and the Streamlit app show tasks the same way: one table row per task, with an emoji for the kind of task and color-coded priority and status.
+
+| Feature | Looks like | Where | Function / library |
+|---------|------------|-------|--------------------|
+| Task-type emojis | 🦮 Morning walk, 💊 Medication | CLI and app | `task_emoji()` in `formatting.py` |
+| Color-coded priority | 🔴 High, 🟡 Medium, 🟢 Low | CLI and app | `PRIORITY_LABELS` in `formatting.py` |
+| Color-coded status | ✅ Done, ⏳ Pending | CLI and app | `STATUS_LABELS` in `formatting.py` |
+| Shared table rows | Time / Task / Pet / Duration / Priority / Status | CLI and app | `task_row()` in `formatting.py` |
+| Structured CLI tables | Rounded box-drawing borders | `main.py` | [`tabulate`](https://pypi.org/project/tabulate/) with `tablefmt="rounded_outline"` |
+| Conflict lines | ⚠️ Conflict on …, or ✅ No conflicts found. | `main.py` | plain `print()` |
+| App tables and messages | Tables without an index column; green, yellow and blue message boxes with icons | `app.py` | Streamlit `st.table(hide_index=True, border="horizontal")`, `st.success`, `st.warning`, `st.info` |
+
+### How the task emoji is picked
+
+`task_emoji()` looks for keywords in the task's description (ignoring case) and uses the first group that matches:
+
+| Keywords | Emoji |
+|----------|-------|
+| walk | 🦮 |
+| feed, breakfast, dinner, meal, food | 🍖 |
+| vet | 🏥 |
+| med, pill | 💊 |
+| brush, groom, bath | 🧼 |
+| play, toy, fetch | 🎾 |
+| water | 💧 |
+| *(nothing matches)* | 🐾 |
+
+The order matters: "Vet meds" gets 🏥 because `vet` is checked before `med`.
+
+### Why `tabulate[widechars]`
+
+Emojis take up two columns in a terminal, which would normally push the table borders out of line. Installing tabulate with the `widechars` extra also installs `wcwidth`, which tabulate uses to measure emoji width correctly, so the borders line up. It's listed in `requirements.txt`; run `pip install -r requirements.txt` after pulling.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `formatting.py` | New: `task_emoji()`, `task_row()`, `PRIORITY_LABELS`, `STATUS_LABELS` |
+| `main.py` | Prints every list as a `tabulate` table and the conflict check with ⚠️ / ✅ |
+| `app.py` | Uses `task_row()`, so app tables get the emojis and a Status column |
+| `requirements.txt` | Added `tabulate[widechars]>=0.9` |
+| `tests/test_pawpal.py` | 1 test for `task_emoji()` keyword matching |
+| `README.md` | This section, and the Demo Walkthrough's table and CLI output |
+
 ## 📸 Demo Walkthrough
 
 Start the app with `streamlit run app.py` (with the virtual environment active).
@@ -232,7 +333,7 @@ Start the app with `streamlit run app.py` (with the virtual environment active).
 
 - **Owner & Pets:** enter the owner's name and add pets with a name and species (dog, cat or other). Added pets are listed under the form.
 - **Tasks:** pick a pet, then enter a task title, start time, duration (1–240 minutes) and priority (low, medium or high), and click **Add task**.
-- **Task list:** every task appears in one table sorted by time, with its pet, duration and priority. The **Show tasks for** dropdown narrows the table to one pet. Below the table, a yellow warning appears for each pair of overlapping tasks, or a green "No overlapping tasks." if there are none.
+- **Task list:** every task appears in one table sorted by time, with a task-type emoji, its pet, duration, color-coded priority and status. The **Show tasks for** dropdown narrows the table to one pet. Below the table, a yellow warning appears for each pair of overlapping tasks, or a green "No overlapping tasks." if there are none.
 - **Build Schedule:** **Generate schedule** builds today's plan within the owner's 120 minutes and shows what was scheduled and what didn't fit.
 
 Current limits: the available time is fixed at 120 minutes, and tasks can't be edited, completed or deleted in the app yet. Pets and tasks are saved to `data.json`, so they're still there after a reload (see [Saving Data](#-saving-data-persistence)).
@@ -254,11 +355,11 @@ Current limits: the available time is fixed at 120 minutes, and tasks can't be e
 4. **Filter by pet.** Choose `Luna` in **Show tasks for**; the table shows only Medication and Long grooming. Switch back to `All pets`.
 5. **Generate the schedule.** Click **Generate schedule**. The app shows "✅ Scheduled 3 of 4 tasks, using 65 of 120 minutes." and this plan:
 
-   | Time | Task | Pet | Duration | Priority |
-   |------|------|-----|----------|----------|
-   | 08:00 | Morning walk | Mochi | 30 min | 🔴 High |
-   | 08:00 | Medication | Luna | 5 min | 🔴 High |
-   | 18:30 | Evening walk | Mochi | 30 min | 🟡 Medium |
+   | Time | Task | Pet | Duration | Priority | Status |
+   |------|------|-----|----------|----------|--------|
+   | 08:00 | 🦮 Morning walk | Mochi | 30 min | 🔴 High | ⏳ Pending |
+   | 08:00 | 💊 Medication | Luna | 5 min | 🔴 High | ⏳ Pending |
+   | 18:30 | 🦮 Evening walk | Mochi | 30 min | 🟡 Medium | ⏳ Pending |
 
    followed by "⏳ Didn't fit in the time left: Long grooming for Luna (90 min)".
 
@@ -273,56 +374,103 @@ Completed-task filtering appears in the CLI demo below. Daily/weekly recurrence 
 
 ### CLI demo: `python main.py`
 
-`main.py` sets up the same kind of scenario in code: two pets and seven tasks added out of time order (one typed as `"8:00"`), Mochi's breakfast marked done, and Luna's medication at the same time as Mochi's morning walk. It then prints the tasks as added, sorted by time, filtered by pet and status, today's schedule, and the conflict check:
+`main.py` sets up the same kind of scenario in code: two pets and seven tasks added out of time order (one typed as `"8:00"`), Mochi's breakfast marked done, and Luna's medication at the same time as Mochi's morning walk. It then prints the tasks as added, sorted by time, filtered by pet and status, today's schedule, the pending tasks in priority order, a plan with only 60 minutes, and the conflict check:
 
 ```
 $ python main.py
 All tasks, in the order they were added
-=======================================
-18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
-08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
-07:00 — Breakfast for Mochi (10 min) [priority: high, done]
-17:00 — Play time for Luna (15 min) [priority: low, pending]
-12:15 — Brushing for Luna (10 min) [priority: low, pending]
-07:30 — Feeding for Luna (10 min) [priority: high, pending]
-08:00 — Medication for Luna (5 min) [priority: high, pending]
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 07:00  │ 🍖 Breakfast    │ Mochi │ 10 min     │ 🔴 High    │ ✅ Done    │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
 
 All tasks, sorted by time
-=========================
-07:00 — Breakfast for Mochi (10 min) [priority: high, done]
-07:30 — Feeding for Luna (10 min) [priority: high, pending]
-08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
-08:00 — Medication for Luna (5 min) [priority: high, pending]
-12:15 — Brushing for Luna (10 min) [priority: low, pending]
-17:00 — Play time for Luna (15 min) [priority: low, pending]
-18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:00  │ 🍖 Breakfast    │ Mochi │ 10 min     │ 🔴 High    │ ✅ Done    │
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
 
 Luna's tasks
-============
-07:30 — Feeding for Luna (10 min) [priority: high, pending]
-08:00 — Medication for Luna (5 min) [priority: high, pending]
-12:15 — Brushing for Luna (10 min) [priority: low, pending]
-17:00 — Play time for Luna (15 min) [priority: low, pending]
+╭────────┬───────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task          │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼───────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:30  │ 🍖 Feeding    │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing   │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time  │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+╰────────┴───────────────┴───────┴────────────┴────────────┴────────────╯
 
 Completed tasks
-===============
-07:00 — Breakfast for Mochi (10 min) [priority: high, done]
+╭────────┬──────────────┬───────┬────────────┬────────────┬──────────╮
+│ Time   │ Task         │ Pet   │ Duration   │ Priority   │ Status   │
+├────────┼──────────────┼───────┼────────────┼────────────┼──────────┤
+│ 07:00  │ 🍖 Breakfast │ Mochi │ 10 min     │ 🔴 High    │ ✅ Done  │
+╰────────┴──────────────┴───────┴────────────┴────────────┴──────────╯
 
 Mochi's pending tasks
-=====================
-08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
-18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
 
 Today's Schedule
-================
-07:30 — Feeding for Luna (10 min) [priority: high, pending]
-08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
-08:00 — Medication for Luna (5 min) [priority: high, pending]
-12:15 — Brushing for Luna (10 min) [priority: low, pending]
-17:00 — Play time for Luna (15 min) [priority: low, pending]
-18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
+
+Pending tasks by priority, then time
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
+
+Today's Schedule with only 60 minutes
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
+
+Didn't fit in 60 minutes
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
 
 Conflict check
-==============
-WARNING: Conflict on 2026-10-14: Mochi's Morning walk at 08:00 (30 min) overlaps Luna's Medication at 08:00
+⚠️  Conflict on 2026-10-14: Mochi's Morning walk at 08:00 (30 min) overlaps Luna's Medication at 08:00
 ```
