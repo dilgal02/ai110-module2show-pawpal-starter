@@ -135,3 +135,38 @@ def test_detect_conflicts_ignores_back_to_back_other_days_and_completed_tasks():
     pet.add_task(done)
 
     assert Scheduler(owner).detect_conflicts() == []
+
+
+def test_next_available_slot_finds_first_gap_that_fits():
+    owner = Owner("Jordan", available_minutes=120)
+    pet = Pet("Mochi", "dog")
+    owner.add_pet(pet)
+    pet.add_task(Task("Morning walk", "08:00", 30))  # busy 08:00-08:30
+    pet.add_task(Task("Feeding", "08:30", 10))  # busy 08:30-08:40
+    pet.add_task(Task("Meds", "09:00", 5))  # busy 09:00-09:05
+    scheduler = Scheduler(owner)
+
+    assert scheduler.next_available_slot(10, earliest="07:00") == "07:00"  # free before the first task
+    assert scheduler.next_available_slot(20, earliest="08:00") == "08:40"  # exactly fills the gap before meds
+    assert scheduler.next_available_slot(25, earliest="08:00") == "09:05"  # too long for that gap
+    assert scheduler.next_available_slot(10, earliest="08:15") == "08:40"  # starting mid-walk jumps past it
+
+    pet.add_task(Task("Brushing", scheduler.next_available_slot(20, earliest="08:00"), 20))
+    assert scheduler.detect_conflicts() == []  # a task placed in the slot doesn't clash
+
+
+def test_next_available_slot_ignores_done_and_other_days_and_gives_up_at_midnight():
+    owner = Owner("Jordan", available_minutes=120)
+    pet = Pet("Mochi", "dog")
+    owner.add_pet(pet)
+    tomorrow = date.today() + timedelta(days=1)
+    breakfast = Task("Breakfast", "08:00", 30)
+    breakfast.mark_complete()
+    pet.add_task(breakfast)
+    pet.add_task(Task("Walk", "08:00", 30, due_date=tomorrow))
+    pet.add_task(Task("Late walk", "23:00", 30))
+    scheduler = Scheduler(owner)
+
+    assert scheduler.next_available_slot(30, earliest="08:00") == "08:00"
+    assert scheduler.next_available_slot(30, earliest="08:00", day=tomorrow) == "08:30"
+    assert scheduler.next_available_slot(45, earliest="23:00") is None

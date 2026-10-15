@@ -169,3 +169,23 @@ class Scheduler:
                     f"({task.duration_minutes} min) overlaps {other_pet.name}'s {other.description} at {other.time}"
                 )
         return warnings
+
+    def next_available_slot(self, duration_minutes: int, earliest: str = "00:00", day: date | None = None) -> str | None:
+        """Return the earliest "HH:MM" start, at or after `earliest`, where a task this long overlaps nothing.
+
+        Only pending tasks on `day` (today by default) take up time, and back-to-back is fine. Busy times are
+        walked in start order, jumping past each one the new task would overlap. Returns None if it can't finish by midnight.
+        """
+        if duration_minutes <= 0:
+            raise ValueError("duration_minutes must be more than 0")
+        day = day or date.today()
+        earliest_time = datetime.strptime(earliest, "%H:%M")
+        start = earliest_time.hour * 60 + earliest_time.minute
+        busy = sorted(task.time_window() for task in self.owner.get_all_tasks() if not task.completed and task.due_date == day)
+        for busy_start, busy_end in busy:
+            if start + duration_minutes <= busy_start:
+                break
+            start = max(start, busy_end)
+        if start + duration_minutes > 24 * 60:
+            return None
+        return f"{start // 60:02d}:{start % 60:02d}"
