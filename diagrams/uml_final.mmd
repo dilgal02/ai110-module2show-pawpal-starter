@@ -1,0 +1,55 @@
+classDiagram
+    %% PawPal+ final design, matching pawpal_system.py. The initial draft is in uml.mmd.
+
+    class Owner {
+        <<dataclass>>
+        +str name
+        +int available_minutes
+        +list~Pet~ pets
+        +add_pet(Pet pet)
+        +get_all_tasks() list~Task~
+    }
+
+    class Pet {
+        <<dataclass>>
+        +str name
+        +str species
+        +list~Task~ tasks
+        +add_task(Task task)
+        +edit_task(Task task, dict changes) Task
+    }
+
+    %% Task validates priority/frequency/duration on creation and zero-pads time to "HH:MM".
+    %% time_window() returns (start, end) as minutes after midnight.
+    class Task {
+        <<dataclass>>
+        +str description
+        +str time
+        +int duration_minutes
+        +str priority
+        +str frequency
+        +bool completed
+        +date due_date
+        +priority_score() int
+        +time_window() tuple
+        +overlaps(Task other) bool
+        +mark_complete() Optional~Task~
+    }
+
+    class Scheduler {
+        +Owner owner
+        +get_pending_tasks() list~Task~
+        +complete_task(Task task) Optional~Task~
+        +filter_tasks(Optional~bool~ completed, Optional~str~ pet_name) list~Task~
+        +sort_tasks(list~Task~ tasks) list~Task~
+        +sort_by_time(list~Task~ tasks) list~Task~
+        +build_plan() list~Task~
+        +detect_conflicts() list~str~
+    }
+
+    Owner "1" o-- "0..*" Pet : owns
+    Pet "1" *-- "0..*" Task : has
+    Scheduler --> "1" Owner : plans for
+    Scheduler ..> Task : sorts, filters, plans
+    Scheduler ..> Pet : adds next occurrence to
+    Task ..> Task : mark_complete() creates next occurrence
