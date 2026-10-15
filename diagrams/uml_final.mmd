@@ -1,5 +1,6 @@
 classDiagram
     %% PawPal+ final design, matching pawpal_system.py. The initial draft is in uml.mmd.
+    %% load_from_json is a classmethod (shown as static with $) that builds an Owner from data.json.
 
     class Owner {
         <<dataclass>>
@@ -8,6 +9,8 @@ classDiagram
         +list~Pet~ pets
         +add_pet(Pet pet)
         +get_all_tasks() list~Task~
+        +save_to_json(str path)
+        +load_from_json(str path)$ Owner
     }
 
     class Pet {
@@ -45,6 +48,7 @@ classDiagram
         +sort_by_time(list~Task~ tasks) list~Task~
         +build_plan() list~Task~
         +detect_conflicts() list~str~
+        +next_available_slot(int duration_minutes, str earliest, Optional~date~ day) Optional~str~
     }
 
     Owner "1" o-- "0..*" Pet : owns
