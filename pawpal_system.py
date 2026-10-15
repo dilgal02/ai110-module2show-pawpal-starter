@@ -1,8 +1,10 @@
 """PawPal+ core classes: Task, Pet, Owner and Scheduler."""
 
-from dataclasses import dataclass, field, replace
+import json
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta
 from itertools import combinations
+from pathlib import Path
 
 PRIORITY_SCORES = {"low": 1, "medium": 2, "high": 3}
 FREQUENCIES = ("once", "daily", "weekly")
@@ -95,6 +97,29 @@ class Owner:
     def get_all_tasks(self) -> list[Task]:
         """Return every pet's tasks together in one list."""
         return [task for pet in self.pets for task in pet.tasks]
+
+    def save_to_json(self, path: str | Path = "data.json") -> None:
+        """Write the owner, their pets and every pet's tasks to a JSON file, replacing what was there."""
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(asdict(self), file, indent=2, default=str)  # default=str turns due_date into "YYYY-MM-DD"
+
+    @classmethod
+    def load_from_json(cls, path: str | Path = "data.json") -> "Owner":
+        """Rebuild an owner, their pets and tasks from a file written by save_to_json().
+
+        Each task goes through Task's normal checks again, so a file with bad values raises ValueError.
+        """
+        with open(path, encoding="utf-8") as file:
+            data = json.load(file)
+        pets = [
+            Pet(
+                pet["name"],
+                pet["species"],
+                [Task(**{**task, "due_date": date.fromisoformat(task["due_date"])}) for task in pet["tasks"]],
+            )
+            for pet in data["pets"]
+        ]
+        return cls(data["name"], data["available_minutes"], pets)
 
 
 class Scheduler:

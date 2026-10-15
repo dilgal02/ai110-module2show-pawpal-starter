@@ -1,10 +1,13 @@
 from datetime import time
+from pathlib import Path
 
 import streamlit as st
 
 from pawpal_system import Owner, Pet, Scheduler, Task
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
+
+DATA_FILE = Path(__file__).with_name("data.json")
 
 st.title("🐾 PawPal+")
 
@@ -44,11 +47,22 @@ st.divider()
 
 st.subheader("Owner & Pets")
 
+# Load saved pets and tasks once per browser session; start fresh if there's no file or it can't be read.
 if "owner" not in st.session_state:
     st.session_state.owner = Owner("Jordan", available_minutes=120)
+    if DATA_FILE.exists():
+        try:
+            st.session_state.owner = Owner.load_from_json(DATA_FILE)
+        except (ValueError, KeyError, TypeError) as error:
+            st.session_state.load_error = f"Couldn't read {DATA_FILE.name}, so this starts empty ({error})."
 owner = st.session_state.owner
+if "load_error" in st.session_state:
+    st.warning(st.session_state.load_error, icon="⚠️")
 
-owner.name = st.text_input("Owner name", value="Jordan")
+name = st.text_input("Owner name", value=owner.name)
+if name != owner.name:
+    owner.name = name
+    owner.save_to_json(DATA_FILE)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -58,6 +72,7 @@ with col2:
 
 if st.button("Add pet"):
     owner.add_pet(Pet(pet_name, species))
+    owner.save_to_json(DATA_FILE)
 
 if owner.pets:
     st.write("Pets: " + ", ".join(f"{pet.name} ({pet.species})" for pet in owner.pets))
@@ -84,6 +99,7 @@ if owner.pets:
 
     if st.button("Add task"):
         selected_pet.add_task(Task(task_title, task_time.strftime("%H:%M"), int(duration), priority))
+        owner.save_to_json(DATA_FILE)
 
 scheduler = Scheduler(owner)
 pet_names = {id(task): pet.name for pet in owner.pets for task in pet.tasks}

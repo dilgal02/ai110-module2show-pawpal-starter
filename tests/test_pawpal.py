@@ -2,6 +2,8 @@
 
 from datetime import date, timedelta
 
+import pytest
+
 from pawpal_system import Owner, Pet, Scheduler, Task
 
 
@@ -170,3 +172,36 @@ def test_next_available_slot_ignores_done_and_other_days_and_gives_up_at_midnigh
     assert scheduler.next_available_slot(30, earliest="08:00") == "08:00"
     assert scheduler.next_available_slot(30, earliest="08:00", day=tomorrow) == "08:30"
     assert scheduler.next_available_slot(45, earliest="23:00") is None
+
+
+def test_save_and_load_json_round_trip(tmp_path):
+    owner = Owner("Jordan", available_minutes=90)
+    mochi = Pet("Mochi", "dog")
+    luna = Pet("Luna", "cat")
+    owner.add_pet(mochi)
+    owner.add_pet(luna)
+    walk = Task("Morning walk", "8:00", 30, "high", "daily")
+    walk.mark_complete()
+    mochi.add_task(walk)
+    luna.add_task(Task("Brushing", "12:15", 10, "low", "weekly", due_date=date.today() + timedelta(days=3)))
+    path = tmp_path / "data.json"
+
+    owner.save_to_json(path)
+    loaded = Owner.load_from_json(path)
+
+    assert loaded == owner  # same name, minutes, pets and every task field, including completed and due_date
+    assert loaded.pets[1].tasks[0].due_date == date.today() + timedelta(days=3)
+    assert loaded.pets[0].tasks[0] is not walk  # rebuilt objects, not the originals
+
+
+def test_load_from_json_rejects_invalid_task_values(tmp_path):
+    owner = Owner("Jordan", available_minutes=90)
+    pet = Pet("Mochi", "dog")
+    owner.add_pet(pet)
+    pet.add_task(Task("Morning walk", "08:00", 30))
+    path = tmp_path / "data.json"
+    owner.save_to_json(path)
+    path.write_text(path.read_text().replace('"medium"', '"urgent"'))
+
+    with pytest.raises(ValueError):
+        Owner.load_from_json(path)
