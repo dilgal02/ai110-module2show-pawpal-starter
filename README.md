@@ -69,19 +69,49 @@ Today's Schedule
 
 ## 🧪 Testing PawPal+
 
+Run the tests from the project folder with the virtual environment active:
+
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pytest
 ```
 
-Sample test output:
+Use `python -m pytest` rather than plain `pytest`: plain `pytest` can't import `pawpal_system` from the `tests/` folder.
+
+### What the tests cover
+
+The 9 tests in `tests/test_pawpal.py` check:
+
+- **Tasks and pets:** `mark_complete()` marks a task done, and `add_task()` adds it to the pet.
+- **Sorting:** `sort_by_time()` returns tasks in chronological order, including times typed without a leading zero (`"9:00"` before `"10:00"`), and leaves the original list unchanged.
+- **Filtering:** `filter_tasks()` by pet name (ignoring case), by completion status, both together, neither, and an unknown pet name.
+- **Recurring tasks:** completing a daily task adds a copy due the next day to the same pet, keeps it out of today's plan, and doesn't add a second copy if completed twice. Weekly tasks repeat 7 days later; one-time tasks don't repeat.
+- **Conflict detection:** `detect_conflicts()` flags two tasks at the same time (different pets) and a task that starts during another one (same pet), and ignores back-to-back tasks, tasks on other days and completed tasks.
+
+### Test output
 
 ```
-# Paste your pytest output here
+$ python -m pytest
+============================= test session starts ==============================
+platform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/repackifymacbook/Desktop/Education/4 Semester/AI Engineering/ai110-module2show-pawpal-starter
+plugins: anyio-4.15.1
+collected 9 items
+
+tests/test_pawpal.py .........                                           [100%]
+
+============================== 9 passed in 0.01s ===============================
 ```
+
+### Confidence Level: ★★★☆☆ (3/5)
+
+All 9 tests pass, and each Smarter Scheduling feature has tests behind it, so the main flows work. It isn't higher because:
+
+- `build_plan()`'s core job, choosing tasks by priority until the owner's time runs out, has no dedicated test yet.
+- Manual checks found three edge cases that don't behave correctly yet and aren't covered by tests:
+  - `sort_by_time()` ignores the due date, so tomorrow's copy of a recurring task can sort ahead of today's tasks.
+  - Completing an overdue daily task creates a copy that's still overdue, so it shows up in today's plan again.
+  - `edit_task()` changes the wrong task when a pet has two identical tasks.
 
 ## 📐 Smarter Scheduling
 
