@@ -22,6 +22,17 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## ✨ Features
+
+- **Priority-based daily plan:** `Scheduler.build_plan()` takes today's pending tasks across all pets, highest priority first (earlier time breaks ties), and keeps adding them while they fit in the owner's available minutes. The plan is shown in time order, with the minutes used and any tasks that didn't fit.
+- **Sorting by time:** `Scheduler.sort_by_time()` lists tasks chronologically with `sorted()` and a lambda key on the `"HH:MM"` time. Times are zero-padded when a task is created, so `"9:00"` correctly sorts before `"10:00"`.
+- **Filtering by pet or status:** `Scheduler.filter_tasks()` narrows tasks by pet name (case-insensitive), by completed/pending, or both. In the app, the "Show tasks for" dropdown filters the task table by pet.
+- **Conflict warnings:** `Scheduler.detect_conflicts()` uses `Task.overlaps()` to flag any two pending tasks on the same day whose time windows overlap, whether they're for the same pet or different pets. That includes tasks at the exact same start time; back-to-back tasks are fine. It only warns and never blocks or crashes, so the owner decides what to move.
+- **Daily and weekly recurrence:** `Scheduler.complete_task()` marks a task done and, for a daily or weekly task, adds its next occurrence to the same pet, due 1 or 7 days later (`timedelta`). One-time tasks don't repeat, completing a task twice doesn't create a duplicate, and future occurrences stay out of today's plan. *Available from Python through `Scheduler.complete_task()` and covered by the tests; the Streamlit app doesn't have a "complete" button yet.*
+- **Input validation:** `Task` rejects unknown priorities or frequencies, durations of 0 or less, and invalid times like `"25:00"` as soon as it's created or edited.
+
+See [Smarter Scheduling](#-smarter-scheduling) for how each algorithm works.
+
 ## Getting started
 
 ### Setup
@@ -154,12 +165,103 @@ On top of the basic plan, the `Scheduler` can sort tasks by time, filter them, w
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+Start the app with `streamlit run app.py` (with the virtual environment active).
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+### What you can do in the app
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+- **Owner & Pets:** enter the owner's name and add pets with a name and species (dog, cat or other). Added pets are listed under the form.
+- **Tasks:** pick a pet, then enter a task title, start time, duration (1–240 minutes) and priority (low, medium or high), and click **Add task**.
+- **Task list:** every task appears in one table sorted by time, with its pet, duration and priority. The **Show tasks for** dropdown narrows the table to one pet. Below the table, a yellow warning appears for each pair of overlapping tasks, or a green "No overlapping tasks." if there are none.
+- **Build Schedule:** **Generate schedule** builds today's plan within the owner's 120 minutes and shows what was scheduled and what didn't fit.
+
+Current limits: the available time is fixed at 120 minutes, tasks can't be edited, completed or deleted in the app yet, and everything resets when the page is reloaded.
+
+### Example workflow
+
+1. **Add two pets.** Type `Mochi`, pick `dog`, click **Add pet**; then `Luna`, `cat`, **Add pet**. The app shows "Pets: Mochi (dog), Luna (cat)".
+2. **Add four tasks, out of time order on purpose:**
+
+   | Pet | Task | Time | Duration | Priority |
+   |-----|------|------|----------|----------|
+   | Mochi | Evening walk | 18:30 | 30 min | medium |
+   | Luna | Long grooming | 13:00 | 90 min | low |
+   | Mochi | Morning walk | 08:00 | 30 min | high |
+   | Luna | Medication | 08:00 | 5 min | high |
+
+3. **Check the task list.** It reads "4 task(s), sorted by time" and lists Morning walk (08:00), Medication (08:00), Long grooming (13:00), Evening walk (18:30). Below it, a warning appears:
+   > ⚠️ Conflict on 2026-10-14: Mochi's Morning walk at 08:00 (30 min) overlaps Luna's Medication at 08:00
+4. **Filter by pet.** Choose `Luna` in **Show tasks for**; the table shows only Medication and Long grooming. Switch back to `All pets`.
+5. **Generate the schedule.** Click **Generate schedule**. The app shows "✅ Scheduled 3 of 4 tasks, using 65 of 120 minutes." and this plan:
+
+   | Time | Task | Pet | Duration | Priority |
+   |------|------|-----|----------|----------|
+   | 08:00 | Morning walk | Mochi | 30 min | 🔴 High |
+   | 08:00 | Medication | Luna | 5 min | 🔴 High |
+   | 18:30 | Evening walk | Mochi | 30 min | 🟡 Medium |
+
+   followed by "⏳ Didn't fit in the time left: Long grooming for Luna (90 min)".
+
+### Scheduler behaviors shown
+
+- **Sorting by time** (`sort_by_time()`): the tasks were added in a random order but always appear chronologically.
+- **Filtering** (`filter_tasks()`): the **Show tasks for** dropdown shows one pet's tasks.
+- **Conflict warnings** (`detect_conflicts()`): the two 08:00 tasks are flagged even though they belong to different pets. It's only a warning, so both stay in the plan and the owner decides what to move.
+- **Priority within a time budget** (`build_plan()`): the high-priority tasks go in first (35 min), then the medium one (65 min total). The low-priority 90-minute grooming would push the total to 155 minutes, over the 120 available, so it's skipped and reported.
+
+Completed-task filtering appears in the CLI demo below. Daily/weekly recurrence isn't in the app or the CLI demo yet; it's covered by the tests (see [Testing PawPal+](#-testing-pawpal)).
+
+### CLI demo: `python main.py`
+
+`main.py` sets up the same kind of scenario in code: two pets and seven tasks added out of time order (one typed as `"8:00"`), Mochi's breakfast marked done, and Luna's medication at the same time as Mochi's morning walk. It then prints the tasks as added, sorted by time, filtered by pet and status, today's schedule, and the conflict check:
+
+```
+$ python main.py
+All tasks, in the order they were added
+=======================================
+18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
+08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
+07:00 — Breakfast for Mochi (10 min) [priority: high, done]
+17:00 — Play time for Luna (15 min) [priority: low, pending]
+12:15 — Brushing for Luna (10 min) [priority: low, pending]
+07:30 — Feeding for Luna (10 min) [priority: high, pending]
+08:00 — Medication for Luna (5 min) [priority: high, pending]
+
+All tasks, sorted by time
+=========================
+07:00 — Breakfast for Mochi (10 min) [priority: high, done]
+07:30 — Feeding for Luna (10 min) [priority: high, pending]
+08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
+08:00 — Medication for Luna (5 min) [priority: high, pending]
+12:15 — Brushing for Luna (10 min) [priority: low, pending]
+17:00 — Play time for Luna (15 min) [priority: low, pending]
+18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
+
+Luna's tasks
+============
+07:30 — Feeding for Luna (10 min) [priority: high, pending]
+08:00 — Medication for Luna (5 min) [priority: high, pending]
+12:15 — Brushing for Luna (10 min) [priority: low, pending]
+17:00 — Play time for Luna (15 min) [priority: low, pending]
+
+Completed tasks
+===============
+07:00 — Breakfast for Mochi (10 min) [priority: high, done]
+
+Mochi's pending tasks
+=====================
+08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
+18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
+
+Today's Schedule
+================
+07:30 — Feeding for Luna (10 min) [priority: high, pending]
+08:00 — Morning walk for Mochi (30 min) [priority: high, pending]
+08:00 — Medication for Luna (5 min) [priority: high, pending]
+12:15 — Brushing for Luna (10 min) [priority: low, pending]
+17:00 — Play time for Luna (15 min) [priority: low, pending]
+18:30 — Evening walk for Mochi (30 min) [priority: medium, pending]
+
+Conflict check
+==============
+WARNING: Conflict on 2026-10-14: Mochi's Morning walk at 08:00 (30 min) overlaps Luna's Medication at 08:00
+```
