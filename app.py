@@ -3,6 +3,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from formatting import task_row
 from pawpal_system import Owner, Pet, Scheduler, Task
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
@@ -103,25 +104,11 @@ if owner.pets:
 
 scheduler = Scheduler(owner)
 pet_names = {id(task): pet.name for pet in owner.pets for task in pet.tasks}
-PRIORITY_LABELS = {"high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}
 
 
 def show_task_table(tasks: list[Task]) -> None:
     """Show tasks as a table, keeping the order they're given in."""
-    st.table(
-        [
-            {
-                "Time": task.time,
-                "Task": task.description,
-                "Pet": pet_names[id(task)],
-                "Duration": f"{task.duration_minutes} min",
-                "Priority": PRIORITY_LABELS[task.priority],
-            }
-            for task in tasks
-        ],
-        hide_index=True,
-        border="horizontal",
-    )
+    st.table([task_row(task, pet_names[id(task)]) for task in tasks], hide_index=True, border="horizontal")
 
 
 if owner.get_all_tasks():

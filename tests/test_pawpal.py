@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from formatting import task_emoji
 from pawpal_system import Owner, Pet, Scheduler, Task
 
 
@@ -205,3 +206,40 @@ def test_load_from_json_rejects_invalid_task_values(tmp_path):
 
     with pytest.raises(ValueError):
         Owner.load_from_json(path)
+
+
+def test_task_emoji_picks_icon_from_description_keywords():
+    assert task_emoji(Task("Morning walk", "08:00", 30)) == "🦮"
+    assert task_emoji(Task("Feeding", "07:30", 10)) == "🍖"
+    assert task_emoji(Task("Vet meds", "09:00", 5)) == "🏥"  # vet is checked before meds
+    assert task_emoji(Task("Medication", "09:00", 5)) == "💊"
+    assert task_emoji(Task("Nail trim", "10:00", 15)) == "🐾"  # no keyword matches
+
+
+def test_sort_tasks_orders_by_priority_then_time():
+    tasks = [
+        Task("Play time", "07:00", 15, "low"),
+        Task("Evening walk", "18:30", 30, "medium"),
+        Task("Meds", "20:00", 5, "high"),
+        Task("Feeding", "07:30", 10, "high"),
+    ]
+
+    sorted_tasks = Scheduler(Owner("Jordan", available_minutes=120)).sort_tasks(tasks)
+
+    assert [task.description for task in sorted_tasks] == ["Feeding", "Meds", "Evening walk", "Play time"]
+
+
+def test_build_plan_keeps_higher_priority_tasks_when_time_is_short():
+    owner = Owner("Jordan", available_minutes=45)
+    pet = Pet("Mochi", "dog")
+    owner.add_pet(pet)
+    pet.add_task(Task("Play time", "07:00", 10, "low"))
+    pet.add_task(Task("Evening walk", "18:30", 30, "medium"))
+    pet.add_task(Task("Meds", "20:00", 5, "high"))
+    pet.add_task(Task("Morning walk", "08:00", 30, "high"))
+
+    plan = Scheduler(owner).build_plan()
+
+    # High tasks first (35 min), the 30-min medium walk doesn't fit the 10 min left,
+    # but the 10-min low-priority play time fills them exactly. The plan comes back in time order.
+    assert [task.description for task in plan] == ["Play time", "Morning walk", "Meds"]

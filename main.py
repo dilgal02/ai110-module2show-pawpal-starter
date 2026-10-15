@@ -1,5 +1,10 @@
 """Temporary testing ground: build a small owner/pet setup and print today's schedule."""
 
+from dataclasses import replace
+
+from tabulate import tabulate
+
+from formatting import task_row
 from pawpal_system import Owner, Pet, Scheduler, Task
 
 owner = Owner("Jordan", available_minutes=120)
@@ -26,12 +31,9 @@ scheduler = Scheduler(owner)
 
 
 def print_tasks(title: str, tasks: list[Task]) -> None:
-    """Print a heading, then one line per task."""
+    """Print a heading, then the tasks as a table."""
     print(f"\n{title}")
-    print("=" * len(title))
-    for task in tasks:
-        status = "done" if task.completed else "pending"
-        print(f"{task.time} — {task.description} for {pet_names[id(task)]} ({task.duration_minutes} min) [priority: {task.priority}, {status}]")
+    print(tabulate([task_row(task, pet_names[id(task)]) for task in tasks], headers="keys", tablefmt="rounded_outline"))
 
 
 print_tasks("All tasks, in the order they were added", owner.get_all_tasks())
@@ -41,10 +43,17 @@ print_tasks("Completed tasks", scheduler.filter_tasks(completed=True))
 print_tasks("Mochi's pending tasks", scheduler.sort_by_time(scheduler.filter_tasks(completed=False, pet_name="mochi")))
 print_tasks("Today's Schedule", scheduler.build_plan())
 
+# Priority scheduling: the order build_plan() picks tasks in, then the same tasks with less time available.
+print_tasks("Pending tasks by priority, then time", scheduler.sort_tasks(scheduler.get_pending_tasks()))
+short_scheduler = Scheduler(replace(owner, available_minutes=60))
+short_plan = short_scheduler.build_plan()
+planned = {id(task) for task in short_plan}
+print_tasks("Today's Schedule with only 60 minutes", short_plan)
+print_tasks("Didn't fit in 60 minutes", [task for task in short_scheduler.sort_tasks(short_scheduler.get_pending_tasks()) if id(task) not in planned])
+
 print("\nConflict check")
-print("==============")
 warnings = scheduler.detect_conflicts()
 for warning in warnings:
-    print(f"WARNING: {warning}")
+    print(f"⚠️  {warning}")
 if not warnings:
-    print("No conflicts found.")
+    print("✅ No conflicts found.")
