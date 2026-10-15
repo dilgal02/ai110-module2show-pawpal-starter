@@ -163,6 +163,67 @@ On top of the basic plan, the `Scheduler` can sort tasks by time, filter them, w
 - Tomorrow's copy isn't part of today's plan, because `get_pending_tasks()` only includes tasks due today or earlier.
 - Call `scheduler.complete_task(task)` rather than `task.mark_complete()` on its own: a `Task` doesn't know which pet it belongs to, so only the scheduler can add the next occurrence to the right pet.
 
+## 💾 Saving Data (Persistence)
+
+PawPal+ remembers the owner, pets and tasks between runs by saving them to `data.json` in the project folder.
+
+### How it works
+
+1. **Starting the app:** the first time a browser session opens the app, `app.py` looks for `data.json`. If it's there, `Owner.load_from_json()` rebuilds the owner, pets and tasks from it. If not, the app starts with an empty owner (Jordan, 120 minutes).
+2. **Making changes:** every time you click **Add pet** or **Add task**, or change the owner's name, the app calls `owner.save_to_json()`, which rewrites `data.json` with everything currently in the app.
+3. **Coming back:** reload the page or restart `streamlit run app.py`, and your pets and tasks are loaded again.
+4. **Starting over:** delete `data.json`.
+
+If `data.json` can't be read (broken JSON, or a bad value like priority `"urgent"`), the app doesn't crash. It shows a warning and starts empty, and the next save replaces the broken file.
+
+### What's in the file
+
+```json
+{
+  "name": "Alex",
+  "available_minutes": 120,
+  "pets": [
+    {
+      "name": "Mochi",
+      "species": "dog",
+      "tasks": [
+        {
+          "description": "Morning walk",
+          "time": "08:00",
+          "duration_minutes": 20,
+          "priority": "high",
+          "frequency": "daily",
+          "completed": false,
+          "due_date": "2026-10-14"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Using it from Python
+
+```python
+from pawpal_system import Owner
+
+owner.save_to_json("data.json")            # write the owner, pets and tasks
+owner = Owner.load_from_json("data.json")  # read them back
+```
+
+- `save_to_json()` turns the owner, their pets and every task into nested dictionaries with `dataclasses.asdict()` and writes them with `json.dump()`. Due dates are stored as `"YYYY-MM-DD"` text.
+- `load_from_json()` is a class method that reads the file and rebuilds real `Pet` and `Task` objects. Every task goes through `Task`'s normal checks again, so times are zero-padded and bad values raise `ValueError`.
+- `main.py` doesn't use the file. It always builds the same demo data.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `pawpal_system.py` | Added `Owner.save_to_json()` and `Owner.load_from_json()` |
+| `app.py` | Loads `data.json` when a session starts, saves after adding a pet or task or renaming the owner, and shows a warning if the file can't be read |
+| `tests/test_pawpal.py` | 2 tests: saving and loading gives back the same owner, pets and tasks, and a file with an invalid priority raises `ValueError` |
+| `README.md` | This section, and the "Current limits" line in the Demo Walkthrough |
+
 ## 📸 Demo Walkthrough
 
 Start the app with `streamlit run app.py` (with the virtual environment active).
@@ -174,7 +235,7 @@ Start the app with `streamlit run app.py` (with the virtual environment active).
 - **Task list:** every task appears in one table sorted by time, with its pet, duration and priority. The **Show tasks for** dropdown narrows the table to one pet. Below the table, a yellow warning appears for each pair of overlapping tasks, or a green "No overlapping tasks." if there are none.
 - **Build Schedule:** **Generate schedule** builds today's plan within the owner's 120 minutes and shows what was scheduled and what didn't fit.
 
-Current limits: the available time is fixed at 120 minutes, tasks can't be edited, completed or deleted in the app yet, and everything resets when the page is reloaded.
+Current limits: the available time is fixed at 120 minutes, and tasks can't be edited, completed or deleted in the app yet. Pets and tasks are saved to `data.json`, so they're still there after a reload (see [Saving Data](#-saving-data-persistence)).
 
 ### Example workflow
 
