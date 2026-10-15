@@ -62,20 +62,29 @@ The scheduling logic lives in `pawpal_system.py` and is built from four classes:
 - **`Owner`**: the owner's name, how many minutes they have available today, and their pets. `get_all_tasks()` returns every pet's tasks together in one list.
 - **`Scheduler`**: the "brain". It reads tasks only through `Owner.get_all_tasks()`, so it plans across all pets at once. `build_plan()` drops completed tasks, sorts the rest by priority (earlier time breaks ties), keeps adding tasks while they fit in the owner's available minutes, and returns the chosen tasks in time order.
 
-How they work together: an `Owner` has many `Pet`s and each `Pet` has many `Task`s. The `Scheduler` is given the `Owner`, gathers all tasks through it, and produces today's plan. `main.py` builds a small example (one owner, two pets, four tasks) and prints the schedule. `tests/test_pawpal.py` checks task completion and adding tasks to a pet.
+How they work together: an `Owner` has many `Pet`s and each `Pet` has many `Task`s. The `Scheduler` is given the `Owner`, gathers all tasks through it, and produces today's plan. `main.py` builds a small example (one owner, two pets, seven tasks) and prints tables showing sorting, filtering, today's plan, priority planning and the conflict check. `tests/test_pawpal.py` has 16 tests covering every feature (see [Testing PawPal+](#-testing-pawpal)).
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Today's plan and the conflict check from `python main.py` (two pets, seven tasks, Mochi's breakfast already done). The full output, including sorting, filtering and priority examples, is in the [Demo Walkthrough](#-demo-walkthrough).
 
 ```
 $ python main.py
+...
 Today's Schedule
-================
-07:30 — Feeding for Luna (10 min) [priority: high]
-08:00 — Morning walk for Mochi (30 min) [priority: high]
-17:00 — Play time for Luna (15 min) [priority: low]
-18:30 — Evening walk for Mochi (30 min) [priority: medium]
+╭────────┬─────────────────┬───────┬────────────┬────────────┬────────────╮
+│ Time   │ Task            │ Pet   │ Duration   │ Priority   │ Status     │
+├────────┼─────────────────┼───────┼────────────┼────────────┼────────────┤
+│ 07:30  │ 🍖 Feeding      │ Luna  │ 10 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 🦮 Morning walk │ Mochi │ 30 min     │ 🔴 High    │ ⏳ Pending │
+│ 08:00  │ 💊 Medication   │ Luna  │ 5 min      │ 🔴 High    │ ⏳ Pending │
+│ 12:15  │ 🧼 Brushing     │ Luna  │ 10 min     │ 🟢 Low     │ ⏳ Pending │
+│ 17:00  │ 🎾 Play time    │ Luna  │ 15 min     │ 🟢 Low     │ ⏳ Pending │
+│ 18:30  │ 🦮 Evening walk │ Mochi │ 30 min     │ 🟡 Medium  │ ⏳ Pending │
+╰────────┴─────────────────┴───────┴────────────┴────────────┴────────────╯
+
+Conflict check
+⚠️  Conflict on 2026-10-14: Mochi's Morning walk at 08:00 (30 min) overlaps Luna's Medication at 08:00
 ```
 
 ## 🧪 Testing PawPal+
@@ -91,13 +100,17 @@ Use `python -m pytest` rather than plain `pytest`: plain `pytest` can't import `
 
 ### What the tests cover
 
-The 9 tests in `tests/test_pawpal.py` check:
+The 16 tests in `tests/test_pawpal.py` check:
 
 - **Tasks and pets:** `mark_complete()` marks a task done, and `add_task()` adds it to the pet.
 - **Sorting:** `sort_by_time()` returns tasks in chronological order, including times typed without a leading zero (`"9:00"` before `"10:00"`), and leaves the original list unchanged.
 - **Filtering:** `filter_tasks()` by pet name (ignoring case), by completion status, both together, neither, and an unknown pet name.
 - **Recurring tasks:** completing a daily task adds a copy due the next day to the same pet, keeps it out of today's plan, and doesn't add a second copy if completed twice. Weekly tasks repeat 7 days later; one-time tasks don't repeat.
 - **Conflict detection:** `detect_conflicts()` flags two tasks at the same time (different pets) and a task that starts during another one (same pet), and ignores back-to-back tasks, tasks on other days and completed tasks.
+- **Priority scheduling:** `sort_tasks()` puts higher priority first with earlier time breaking ties, and `build_plan()` keeps high-priority tasks when time is short, skips a task that doesn't fit, still fills the leftover minutes with a shorter task, and returns the plan in time order.
+- **Next available slot:** `next_available_slot()` finds the first gap that fits (including an exact fit and starting in the middle of a task), ignores completed tasks and other days, returns `None` past midnight, and a task placed in its slot causes no conflict.
+- **Saving and loading:** `save_to_json()` then `load_from_json()` gives back the same owner, pets and tasks (including completed status and due dates), and a file with an invalid priority raises `ValueError`.
+- **Output formatting:** `task_emoji()` picks the right emoji from keywords, checks "vet" before "med", and falls back to 🐾.
 
 ### Test output
 
@@ -107,22 +120,20 @@ $ python -m pytest
 platform darwin -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0
 rootdir: /Users/repackifymacbook/Desktop/Education/4 Semester/AI Engineering/ai110-module2show-pawpal-starter
 plugins: anyio-4.15.1
-collected 9 items
+collected 16 items
 
-tests/test_pawpal.py .........                                           [100%]
+tests/test_pawpal.py ................                                    [100%]
 
-============================== 9 passed in 0.01s ===============================
+============================== 16 passed in 0.02s ==============================
 ```
 
 ### Confidence Level: ★★★☆☆ (3/5)
 
-All 9 tests pass, and each Smarter Scheduling feature has tests behind it, so the main flows work. It isn't higher because:
+All 16 tests pass, and every feature (sorting, filtering, conflicts, recurrence, priority planning, next available slot, saving and loading) has tests behind it, so the main flows work. It isn't higher because manual checks found three edge cases that don't behave correctly yet and aren't covered by tests:
 
-- `build_plan()`'s core job, choosing tasks by priority until the owner's time runs out, has no dedicated test yet.
-- Manual checks found three edge cases that don't behave correctly yet and aren't covered by tests:
-  - `sort_by_time()` ignores the due date, so tomorrow's copy of a recurring task can sort ahead of today's tasks.
-  - Completing an overdue daily task creates a copy that's still overdue, so it shows up in today's plan again.
-  - `edit_task()` changes the wrong task when a pet has two identical tasks.
+- `sort_by_time()` ignores the due date, so tomorrow's copy of a recurring task can sort ahead of today's tasks.
+- Completing an overdue daily task creates a copy that's still overdue, so it shows up in today's plan again.
+- `edit_task()` changes the wrong task when a pet has two identical tasks.
 
 ## 📐 Smarter Scheduling
 
